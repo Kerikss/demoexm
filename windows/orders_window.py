@@ -1,7 +1,8 @@
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QLabel, QPushButton, QTableWidget, QTableWidgetItem,
                              QHeaderView, QAbstractItemView, QMessageBox)
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtCore import Qt
 from config import LOGO_PATH, ICON_PATH
 from database import get_all_orders, delete_order
 from dialogs.order_edit_dialog import OrderEditDialog
@@ -49,7 +50,8 @@ class OrdersWindow(QMainWindow):
 
         # Таблица заказов
         self.table = QTableWidget()
-        headers = ["ID заказа", "Клиент", "Статус", "Адрес ПВ", "Дата заказа", "Дата доставки", "Код получения"]
+        headers = ["ID заказа", "Фамилия", "Имя", "Отчество", "Статус",
+                   "Адрес ПВ", "Дата заказа", "Дата доставки", "Код получения"]
         if self.role == 'Администратор':
             headers.append("Действия")
         self.table.setColumnCount(len(headers))
@@ -69,14 +71,16 @@ class OrdersWindow(QMainWindow):
         orders = get_all_orders()
         self.table.setRowCount(len(orders))
         for row, order in enumerate(orders):
-            order_id, client, status, address, order_date, delivery_date, pickup_code = order
+            order_id, last_name, first_name, middle_name, status, address, order_date, delivery_date, pickup_code = order
             self.table.setItem(row, 0, QTableWidgetItem(str(order_id)))
-            self.table.setItem(row, 1, QTableWidgetItem(client))
-            self.table.setItem(row, 2, QTableWidgetItem(status))
-            self.table.setItem(row, 3, QTableWidgetItem(address))
-            self.table.setItem(row, 4, QTableWidgetItem(order_date if order_date else ""))
-            self.table.setItem(row, 5, QTableWidgetItem(delivery_date if delivery_date else ""))
-            self.table.setItem(row, 6, QTableWidgetItem(pickup_code))
+            self.table.setItem(row, 1, QTableWidgetItem(last_name or ""))
+            self.table.setItem(row, 2, QTableWidgetItem(first_name or ""))
+            self.table.setItem(row, 3, QTableWidgetItem(middle_name or ""))
+            self.table.setItem(row, 4, QTableWidgetItem(status))
+            self.table.setItem(row, 5, QTableWidgetItem(address))
+            self.table.setItem(row, 6, QTableWidgetItem(order_date if order_date else ""))
+            self.table.setItem(row, 7, QTableWidgetItem(delivery_date if delivery_date else ""))
+            self.table.setItem(row, 8, QTableWidgetItem(pickup_code))
 
             if self.role == 'Администратор':
                 btn_widget = QWidget()
@@ -91,7 +95,7 @@ class OrdersWindow(QMainWindow):
                 btn_layout.addWidget(edit_btn)
                 btn_layout.addWidget(delete_btn)
                 btn_layout.addStretch()
-                self.table.setCellWidget(row, 7, btn_widget)
+                self.table.setCellWidget(row, 9, btn_widget)
 
         self.table.resizeColumnsToContents()
 

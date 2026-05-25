@@ -5,15 +5,15 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt
 from database import (save_product, get_all_categories, get_all_manufacturers,
-                      get_products)
+                      get_all_suppliers, get_products)
 from utils.helpers import save_photo, validate_product_input
 
 class ProductEditDialog(QDialog):
-    def __init__(self, parent=None, article=None):
+    def __init__(self, parent=None, product_id=None):
         super().__init__(parent)
         self.parent_window = parent
-        self.article = article
-        self.is_new = (article is None)
+        self.product_id = product_id
+        self.is_new = (product_id is None)
         self.photo_filename = None
         self.setWindowTitle("Добавление товара" if self.is_new else "Редактирование товара")
         self.setModal(True)
@@ -22,7 +22,7 @@ class ProductEditDialog(QDialog):
         layout = QVBoxLayout(self)
         form = QFormLayout()
 
-        # Артикул
+        # Артикул (ProductID)
         self.article_edit = QLineEdit()
         if not self.is_new:
             self.article_edit.setReadOnly(True)
@@ -39,10 +39,13 @@ class ProductEditDialog(QDialog):
         self.price_edit.setPlaceholderText("0.00")
         form.addRow("Цена:", self.price_edit)
 
-        self.supplier_edit = QLineEdit()
-        form.addRow("Поставщик:", self.supplier_edit)
+        # Поставщик (выпадающий список с возможностью добавления)
+        self.supplier_combo = QComboBox()
+        self.supplier_combo.addItems(get_all_suppliers())
+        self.supplier_combo.setEditable(True)
+        form.addRow("Поставщик:", self.supplier_combo)
 
-        # Производитель (комбобокс)
+        # Производитель
         self.manufacturer_combo = QComboBox()
         self.manufacturer_combo.addItems(get_all_manufacturers())
         self.manufacturer_combo.setEditable(True)
@@ -93,10 +96,15 @@ class ProductEditDialog(QDialog):
         conn = get_connection()
         cur = conn.cursor()
         cur.execute("""
-            SELECT article, name, unit, price, supplier, manufacturer, category,
-                   discount, stock_quantity, description, photo
-            FROM Products WHERE article=?
-        """, (self.article,))
+            SELECT p.ProductID, p.ProductName, p.Unit, p.Price,
+                   s.SupplierName, m.ManufacturerName, c.CategoryName,
+                   p.Discount, p.StockQuantity, p.Description, p.Photo
+            FROM Products p
+            JOIN Suppliers s ON p.SupplierID = s.SupplierID
+            JOIN Manufacturers m ON p.ManufacturerID = m.ManufacturerID
+            JOIN Categories c ON p.CategoryID = c.CategoryID
+            WHERE p.ProductID=?
+        """, (self.product_id,))
         row = cur.fetchone()
         conn.close()
         if row:
@@ -104,7 +112,12 @@ class ProductEditDialog(QDialog):
             self.name_edit.setText(row[1] or "")
             self.unit_edit.setText(row[2] or "шт.")
             self.price_edit.setText(str(row[3]) if row[3] is not None else "")
-            self.supplier_edit.setText(row[4] or "")
+            # Поставщик
+            idx = self.supplier_combo.findText(row[4])
+            if idx >= 0:
+                self.supplier_combo.setCurrentIndex(idx)
+            else:
+                self.supplier_combo.setEditText(row[4])
             # Производитель
             idx = self.manufacturer_combo.findText(row[5])
             if idx >= 0:
@@ -134,6 +147,8 @@ class ProductEditDialog(QDialog):
                 self.photo_label.setText("Нет фото")
 
     def choose_photo(self):
+        from config import IMAGES_PATH
+        from utils.helpers import save_photo
         file_path, _ = QFileDialog.getOpenFileName(self, "Выберите фото", "",
                                                    "Images (*.png *.jpg *.jpeg *.bmp)")
         if file_path:
@@ -150,7 +165,6 @@ class ProductEditDialog(QDialog):
                 QMessageBox.warning(self, "Ошибка", f"Не удалось загрузить фото:\n{str(e)}")
 
     def validate(self):
-        # Собираем существующие артикулы для проверки уникальности
         existing = set()
         if self.is_new:
             products = get_products()
@@ -173,11 +187,11 @@ class ProductEditDialog(QDialog):
             QMessageBox.critical(self, "Ошибка ввода", "\n".join(errors))
             return
 
-        article = self.article_edit.text().strip()
+        product_id = self.article_edit.text().strip()
         name = self.name_edit.text().strip()
         unit = self.unit_edit.text().strip() or "шт."
         price = float(self.price_edit.text().replace(",", "."))
-        supplier = self.supplier_edit.text().strip()
+        supplier = self.supplier_combo.currentText().strip()
         manufacturer = self.manufacturer_combo.currentText().strip()
         category = self.category_combo.currentText().strip()
         discount = int(self.discount_edit.text())
@@ -189,14 +203,14 @@ class ProductEditDialog(QDialog):
             from database import get_connection
             conn = get_connection()
             cur = conn.cursor()
-            cur.execute("SELECT photo FROM Products WHERE article=?", (article,))
+            cur.execute("SELECT Photo FROM Products WHERE ProductID=?", (product_id,))
             row = cur.fetchone()
             if row and row[0]:
                 self.photo_filename = row[0]
             conn.close()
 
         try:
-            save_product(article, name, unit, price, supplier, manufacturer, category,
+            save_product(product_id, name, unit, price, supplier, manufacturer, category,
                          discount, stock, description, self.photo_filename, self.is_new)
             QMessageBox.information(self, "Успех", "Товар сохранён.")
             super().accept()

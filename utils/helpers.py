@@ -4,7 +4,6 @@ from PyQt5.QtGui import QPixmap
 from config import IMAGES_PATH, PLACEHOLDER_PATH
 
 def save_photo(file_path):
-    """Сохраняет фото, уменьшая до 300x200, возвращает имя файла."""
     if not file_path:
         return None
     img = Image.open(file_path)
@@ -20,7 +19,6 @@ def save_photo(file_path):
     return os.path.basename(dest_path)
 
 def get_pixmap(photo_filename):
-    """Возвращает QPixmap для фото или заглушку."""
     if photo_filename:
         path = os.path.join(IMAGES_PATH, photo_filename)
         if os.path.exists(path):

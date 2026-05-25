@@ -2,7 +2,8 @@ from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                              QComboBox, QPushButton, QTableWidget, QTableWidgetItem,
                              QHBoxLayout, QLabel, QMessageBox, QDialogButtonBox,
                              QSpinBox, QDateEdit)
-from PyQt5.QtCore import QDate
+from PyQt5.QtCore import QDate, Qt
+from PyQt5.QtWidgets import QHeaderView
 from database import (get_clients, get_order_statuses, get_pickup_points,
                       get_next_order_id, save_order, get_order_by_id,
                       get_all_products_for_combo)
@@ -90,7 +91,7 @@ class OrderEditDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
-        self.items = []  # список [article, name, quantity]
+        self.items = []  # список [product_id, name, quantity]
 
         if not self.is_new:
             self.load_order_data()
@@ -98,9 +99,9 @@ class OrderEditDialog(QDialog):
     def load_order_data(self):
         order, items = get_order_by_id(self.order_id)
         if order:
-            user_id, status_id, point_id, order_date, delivery_date, pickup_code = order
+            customer_id, status_id, point_id, order_date, delivery_date, pickup_code = order
             # Устанавливаем клиента
-            idx = self.client_combo.findData(user_id)
+            idx = self.client_combo.findData(customer_id)
             if idx >= 0:
                 self.client_combo.setCurrentIndex(idx)
             # Статус
@@ -118,13 +119,9 @@ class OrderEditDialog(QDialog):
                 self.delivery_date_edit.setDate(QDate.fromString(delivery_date, "yyyy-MM-dd"))
             self.pickup_code_edit.setText(pickup_code or "")
         # Позиции
+        products_dict = {pid: name for pid, name in get_all_products_for_combo()}
         for art, qty in items:
-            # Получаем название товара
-            name = ""
-            for a, n in get_all_products_for_combo():
-                if a == art:
-                    name = n
-                    break
+            name = products_dict.get(art, "")
             self.items.append([art, name, qty])
         self.refresh_items_table()
 
@@ -151,8 +148,8 @@ class OrderEditDialog(QDialog):
 
         combo = QComboBox()
         products = get_all_products_for_combo()
-        for art, name in products:
-            combo.addItem(f"{art} - {name}", art)
+        for pid, name in products:
+            combo.addItem(f"{pid} - {name}", pid)
         d_layout.addWidget(combo)
 
         d_layout.addWidget(QLabel("Количество:"))
@@ -169,12 +166,7 @@ class OrderEditDialog(QDialog):
         if dialog.exec_() == QDialog.Accepted:
             art = combo.currentData()
             qty = spin.value()
-            # Получаем название
-            name = ""
-            for a, n in products:
-                if a == art:
-                    name = n
-                    break
+            name = next((n for pid, n in products if pid == art), "")
             self.items.append([art, name, qty])
             self.refresh_items_table()
 
@@ -191,7 +183,7 @@ class OrderEditDialog(QDialog):
         if self.is_new and self.order_id_edit.text().strip():
             try:
                 new_id = int(self.order_id_edit.text())
-                # Проверка уникальности будет выполнена при сохранении
+                # уникальность проверится при сохранении
             except ValueError:
                 errors.append("Номер заказа должен быть целым числом.")
         return errors
@@ -202,7 +194,6 @@ class OrderEditDialog(QDialog):
             QMessageBox.critical(self, "Ошибка", "\n".join(errors))
             return
 
-        # Определяем номер заказа
         if self.is_new:
             if self.order_id_edit.text().strip():
                 order_id = int(self.order_id_edit.text())
@@ -211,7 +202,7 @@ class OrderEditDialog(QDialog):
         else:
             order_id = self.order_id
 
-        user_id = self.client_combo.currentData()
+        customer_id = self.client_combo.currentData()
         status_id = self.status_combo.currentData()
         point_id = self.address_combo.currentData()
         order_date = self.order_date_edit.date().toString("yyyy-MM-dd")
@@ -223,7 +214,7 @@ class OrderEditDialog(QDialog):
         items = [(art, qty) for art, _, qty in self.items]
 
         try:
-            save_order(order_id, user_id, status_id, point_id,
+            save_order(order_id, customer_id, status_id, point_id,
                        order_date, delivery_date, pickup_code, items, self.is_new)
             QMessageBox.information(self, "Успех", "Заказ сохранён.")
             super().accept()
